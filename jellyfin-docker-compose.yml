@@ -1,0 +1,15 @@
+version: '3.5'
+services:
+  jellyfin:
+    image: jellyfin/jellyfin
+    container_name: jellyfin
+    network_mode: 'host' #host network mode makes it so that no new network is created, it shares the host network
+    volumes:
+      - ./config:/config #./ before a file just has it look in the local directory where docker-compose.yml lives
+      - ./cache:/cache
+      - /bigBoi:/bigBoi #put your data location here
+    restart: 'unless-stopped'
+    environment:
+      - JELLYFIN_PublishedServerUrl=https://exmample.duckdns.org # put your address here, or IP if it's local-only
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
