@@ -1,0 +1,161 @@
+version: "3"
+services:
+  vpn:
+    image: qmcgaw/gluetun
+    container_name: vpn
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      - 8090:8090 # qbittorrent Web UI
+      - 6881:6881 # qbittorrent
+      - 6881:6881/udp # qbittorrent
+      - 8389:8389/udp # Gluetun-Shadowsocks?
+      - 8389:8389/tcp # Gluetun-Shadowsocks?
+      - 8889:8889/tcp # Gluetun
+      - 9696:9696 # prowlarr
+      - 9117:9117 # jackett
+      - 8787:8787 # readarr
+      - 8989:8989 # sonarr
+      - 7878:7878 # radarr
+      - 6565:6565 #nicotine-plus
+      # - 8686:8686 # lidarr
+    volumes:
+      - ./gluetun:/gluetun
+    environment:
+      - VPN_SERVICE_PROVIDER=private internet access # see https://github.com/qdm12/gluetun for options
+      - OPENVPN_USER=ur-username
+      - OPENVPN_PASSWORD=ur-password
+      # Timezone for accurate log times
+      - TZ=US/Arizona
+    restart: always
+
+  qbittorrent:
+    image: linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Arizona
+      - UMASK=022
+      - WEBUI_PORT=8090
+      - SERVER_REGIONS=US California
+    volumes:
+      - ./qbittorrent/config:/config
+      - /bigBoi/NEW:/downloads
+      - /bigBoi/TV:/TV
+      - /bigBoi/Movies:/Movies
+    network_mode: service:vpn
+    labels:
+      - autoheal=true
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+  prowlarr:
+    image: hotio/prowlarr:testing
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Arizona
+    volumes:
+      - ./prowlarr:/config
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - vpn
+      - qbittorrent
+
+  jackett:
+    image: linuxserver/jackett:latest
+    container_name: vpn-jackett
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Arizona
+    volumes:
+      - ./jackett/config:/config
+    network_mode: service:vpn
+    labels:
+      - autoheal=true
+      - com.centurylinklabs.watchtower.depends-on=vpn
+    healthcheck:
+      test: curl google.com || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/London
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./sonarr/config:/config
+      - /bigBoi/TV:/TV
+      - /bigBoi/NEW:/downloads
+    restart: always
+    network_mode: service:vpn
+    depends_on:
+      - jackett
+      - qbittorrent
+
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Arizona
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./radarr3/config:/config
+      - /bigBoi/Movies:/Movies
+      - /bigBoi/NEW:/downloads
+    restart: always
+    network_mode: service:vpn
+    depends_on:
+      - jackett
+      - qbittorrent
+
+  readarr:
+    image: lscr.io/linuxserver/readarr:nightly
+    container_name: readarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=US/Arizona
+    volumes:
+      - ./config:/config
+      - ./books:/books #optional
+      - ./downloads:/downloads #optional
+    restart: unless-stopped
+    network_mode: service:vpn
+    depends_on:
+      - qbittorrent
+
+  nicotineplus-proper:
+    image: 'sirjmann92/nicotineplus-proper:latest'
+    container_name: nicotine
+    network_mode: service:vpn
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - DARKMODE=true
+      - LOGIN=ur-soulseek-username
+      - PASSW=ur-soulseek-password
+    volumes:
+      - /bigBoi/Music:/downloads
+      - ./config:/root/.config/nicotine # (Optional) Save your config persistently
+      - ./config/data:/root/.local/share/nicotine #(Optional) Store your logs, database, and history
+    restart: unless-stopped
